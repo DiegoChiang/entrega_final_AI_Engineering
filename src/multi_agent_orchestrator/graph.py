@@ -22,6 +22,7 @@ def route_supervisor(state: OrchestratorState) -> RouteTarget:
 def build_graph(
     model: Any,
     *,
+    retriever: Any,
     max_steps: int = 8,
     checkpointer: Any | None = None,
 ) -> CompiledStateGraph:
@@ -29,7 +30,7 @@ def build_graph(
 
     builder = StateGraph(OrchestratorState)
     builder.add_node("supervisor", Supervisor(model, max_steps=max_steps))
-    builder.add_node("researcher", ResearchAgent(model))
+    builder.add_node("researcher", ResearchAgent(model, retriever))
     builder.add_node("analyst", AnalysisAgent(model))
     builder.add_node("validator", validate_result)
     builder.add_node("approval", request_human_approval)

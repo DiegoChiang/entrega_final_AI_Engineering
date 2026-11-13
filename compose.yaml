@@ -35,9 +35,11 @@ services:
     environment:
       REDIS_URL: redis://redis:6379
       PHOENIX_COLLECTOR_ENDPOINT: http://phoenix:6006/v1/traces
-      PHOENIX_PROJECT_NAME: preentrega7-agent-api
+      PHOENIX_PROJECT_NAME: incident-intelligence-system
       PHOENIX_ENABLED: "true"
       LLM_VERIFY_SSL: ${LLM_VERIFY_SSL:-true}
+      RAG_DATA_DIR: /app/data/knowledge
+      RAG_INDEX_PATH: /app/state/rag-index.json
     depends_on:
       redis:
         condition: service_healthy
@@ -45,6 +47,8 @@ services:
         condition: service_started
     ports:
       - "8000:8000"
+    volumes:
+      - app-state:/app/state
     healthcheck:
       test:
         [
@@ -60,3 +64,4 @@ services:
 volumes:
   redis-data:
   phoenix-data:
+  app-state:

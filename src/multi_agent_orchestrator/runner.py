@@ -9,6 +9,7 @@ from langchain_core.messages import HumanMessage
 from multi_agent_orchestrator.config import Settings, get_settings
 from multi_agent_orchestrator.graph import build_graph
 from multi_agent_orchestrator.model import build_model
+from multi_agent_orchestrator.rag.service import build_retriever
 
 
 async def run_orchestrator(
@@ -16,15 +17,17 @@ async def run_orchestrator(
     *,
     settings: Settings | None = None,
     model: Any | None = None,
+    retriever: Any | None = None,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """Ejecuta el grafo y devuelve estado final junto con la secuencia de nodos."""
 
-    if settings is None and model is None:
+    if settings is None and (model is None or retriever is None):
         settings = get_settings()
     active_model = model or build_model(settings)  # type: ignore[arg-type]
+    active_retriever = retriever or await build_retriever(settings)  # type: ignore[arg-type]
     max_steps = settings.supervisor_max_steps if settings else 8
     recursion_limit = settings.recursion_limit if settings else 30
-    graph = build_graph(active_model, max_steps=max_steps)
+    graph = build_graph(active_model, retriever=active_retriever, max_steps=max_steps)
     initial_state = {
         "messages": [HumanMessage(content=request)],
         "request": request,

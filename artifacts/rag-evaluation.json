@@ -1,0 +1,93 @@
+{
+  "k": 5,
+  "queries": 5,
+  "mean_precision_at_k": 0.36,
+  "mean_recall_at_k": 0.9,
+  "results": [
+    {
+      "question": "¿Que debe revisarse ante errores sostenidos en checkout?",
+      "retrieved_document_ids": [
+        "runbook-checkout-01",
+        "telemetry-checkout-02",
+        "runbook-redis-06",
+        "policy-severity-08",
+        "postmortem-redis-07"
+      ],
+      "relevant_document_ids": [
+        "runbook-checkout-01",
+        "telemetry-checkout-02"
+      ],
+      "hits": 2,
+      "precision_at_k": 0.4,
+      "recall_at_k": 1.0
+    },
+    {
+      "question": "¿Como se mitiga la saturacion del proveedor de pagos?",
+      "retrieved_document_ids": [
+        "runbook-checkout-01",
+        "telemetry-checkout-02",
+        "postmortem-payments-03",
+        "telemetry-search-05",
+        "postmortem-redis-07"
+      ],
+      "relevant_document_ids": [
+        "postmortem-payments-03",
+        "runbook-checkout-01"
+      ],
+      "hits": 2,
+      "precision_at_k": 0.4,
+      "recall_at_k": 1.0
+    },
+    {
+      "question": "¿Que hacer cuando el indice de busqueda esta atrasado?",
+      "retrieved_document_ids": [
+        "runbook-search-04",
+        "telemetry-search-05",
+        "runbook-redis-06",
+        "runbook-checkout-01",
+        "postmortem-payments-03"
+      ],
+      "relevant_document_ids": [
+        "runbook-search-04",
+        "telemetry-search-05"
+      ],
+      "hits": 2,
+      "precision_at_k": 0.4,
+      "recall_at_k": 1.0
+    },
+    {
+      "question": "¿Como responder a la presion de memoria de Redis?",
+      "retrieved_document_ids": [
+        "runbook-redis-06",
+        "postmortem-redis-07",
+        "runbook-checkout-01",
+        "policy-severity-08",
+        "postmortem-payments-03"
+      ],
+      "relevant_document_ids": [
+        "runbook-redis-06",
+        "postmortem-redis-07"
+      ],
+      "hits": 2,
+      "precision_at_k": 0.4,
+      "recall_at_k": 1.0
+    },
+    {
+      "question": "¿Cuando un incidente requiere aprobacion humana?",
+      "retrieved_document_ids": [
+        "policy-severity-08",
+        "postmortem-payments-03",
+        "runbook-search-04",
+        "telemetry-checkout-02",
+        "runbook-redis-06"
+      ],
+      "relevant_document_ids": [
+        "policy-severity-08",
+        "runbook-checkout-01"
+      ],
+      "hits": 1,
+      "precision_at_k": 0.2,
+      "recall_at_k": 0.5
+    }
+  ]
+}

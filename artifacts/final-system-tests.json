@@ -1,0 +1,74 @@
+{
+  "request_count": 5,
+  "concurrency": 5,
+  "p95_latency_seconds": 71.618,
+  "all_completed": true,
+  "jobs": [
+    {
+      "job_id": "5ae5dd24-09b3-4814-8d0f-45c7b4fcd137",
+      "status": "COMPLETED",
+      "latency_seconds": 61.467,
+      "approval_used": false,
+      "source_document_ids": [
+        "policy-severity-08",
+        "telemetry-checkout-02",
+        "runbook-checkout-01",
+        "postmortem-redis-07",
+        "postmortem-payments-03"
+      ]
+    },
+    {
+      "job_id": "24cfa3d1-1903-4688-9021-bd5275a52f29",
+      "status": "COMPLETED",
+      "latency_seconds": 71.618,
+      "approval_used": true,
+      "source_document_ids": [
+        "telemetry-search-05",
+        "runbook-search-04",
+        "telemetry-checkout-02",
+        "runbook-checkout-01",
+        "policy-severity-08"
+      ]
+    },
+    {
+      "job_id": "f3149f06-6ac6-4f55-bf00-94a33f04e689",
+      "status": "COMPLETED",
+      "latency_seconds": 56.151,
+      "approval_used": false,
+      "source_document_ids": [
+        "postmortem-redis-07",
+        "runbook-redis-06",
+        "runbook-checkout-01",
+        "policy-severity-08",
+        "postmortem-payments-03"
+      ]
+    },
+    {
+      "job_id": "655eb39a-0506-400f-b7d7-5630da972584",
+      "status": "COMPLETED",
+      "latency_seconds": 68.596,
+      "approval_used": true,
+      "source_document_ids": [
+        "telemetry-checkout-02",
+        "runbook-checkout-01",
+        "runbook-search-04",
+        "postmortem-payments-03",
+        "policy-severity-08"
+      ]
+    },
+    {
+      "job_id": "7f1bc6b8-1741-4cd1-b4fb-19b82a0f041d",
+      "status": "COMPLETED",
+      "latency_seconds": 27.967,
+      "approval_used": false,
+      "source_document_ids": [
+        "policy-severity-08",
+        "runbook-search-04",
+        "postmortem-payments-03",
+        "telemetry-checkout-02",
+        "runbook-redis-06"
+      ]
+    }
+  ],
+  "phoenix_dashboard": "http://localhost:6006"
+}

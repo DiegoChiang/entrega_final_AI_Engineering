@@ -6,7 +6,7 @@ import json
 from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from multi_agent_orchestrator.state import OrchestratorState, RouteTarget
 
@@ -42,8 +42,9 @@ class Supervisor:
             "approval_status": state.get("approval_status", "not_required"),
             "completed_agents": state.get("completed_agents", []),
         }
-        decision = await self._router.ainvoke(
-            [
+        try:
+            decision = await self._router.ainvoke(
+                [
                 SystemMessage(
                     content=(
                         "Eres el supervisor de un grafo jerarquico. Elige exactamente un nodo. "
@@ -60,8 +61,15 @@ class Supervisor:
                         f"{json.dumps(status, ensure_ascii=False)}"
                     )
                 ),
-            ]
-        )
+                ]
+            )
+        except ValidationError:
+            fallback = self._enforce_prerequisites("synthesizer", state)
+            decision = RouteDecision(
+                next_agent=fallback,
+                reasoning="La salida estructurada fue invalida; se aplicaron las guardas.",
+                instruction=self._fallback_instruction(fallback, state),
+            )
         target = self._enforce_prerequisites(decision.next_agent, state)
         instruction = decision.instruction
         reasoning = decision.reasoning

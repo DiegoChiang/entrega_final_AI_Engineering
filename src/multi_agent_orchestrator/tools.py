@@ -1,58 +1,18 @@
-"""Herramientas funcionales y acotadas de los agentes especialistas."""
+"""Herramientas validadas de recuperacion y calculo."""
 
 from __future__ import annotations
 
 import json
-import re
-from typing import Any
+from typing import Any, Protocol
 
-from langchain_core.tools import tool
+from langchain_core.tools import BaseTool, tool
 from pydantic import BaseModel, Field
 
-_KNOWLEDGE_BASE: tuple[dict[str, Any], ...] = (
-    {
-        "source_id": "runbook-checkout-01",
-        "title": "Runbook de errores del checkout",
-        "summary": (
-            "Una tasa de error superior a 8% durante mas de 10 minutos exige escalar al equipo "
-            "de pagos. El primer control es verificar el pool de conexiones y el proveedor externo."
-        ),
-        "metrics": {"error_rate_pct": 12.4, "duration_minutes": 18.0},
-        "tags": ["checkout", "errores", "pagos", "runbook"],
-    },
-    {
-        "source_id": "telemetry-checkout-02",
-        "title": "Telemetria consolidada del incidente",
-        "summary": (
-            "El p95 de checkout alcanzo 2450 ms, 1840 usuarios encontraron fallos y el servicio "
-            "de catalogo se mantuvo dentro de sus objetivos."
-        ),
-        "metrics": {"latency_p95_ms": 2450.0, "affected_users": 1840.0},
-        "tags": ["checkout", "latencia", "usuarios", "telemetria"],
-    },
-    {
-        "source_id": "postmortem-payments-03",
-        "title": "Postmortem de saturacion del adaptador de pagos",
-        "summary": (
-            "Un patron comparable se resolvio limitando reintentos, ampliando el pool y activando "
-            "el circuito de degradacion mientras se recuperaba el proveedor."
-        ),
-        "metrics": {"retry_multiplier": 3.1, "recovery_minutes": 27.0},
-        "tags": ["pagos", "checkout", "reintentos", "mitigacion"],
-    },
-    {
-        "source_id": "runbook-search-04",
-        "title": "Runbook de busqueda de productos",
-        "summary": "La busqueda se degrada cuando el indice supera cinco minutos de atraso.",
-        "metrics": {"index_lag_minutes": 7.0},
-        "tags": ["busqueda", "catalogo", "indice"],
-    },
-)
+from multi_agent_orchestrator.rag.schemas import RetrievalQuery
 
 
-class SearchInput(BaseModel):
-    query: str = Field(min_length=3, description="Solicitud o tema que se debe investigar")
-    limit: int = Field(default=3, ge=1, le=4)
+class Retriever(Protocol):
+    async def retrieve(self, query: str, *, limit: int | None = None) -> list[Any]: ...
 
 
 class PriorityInput(BaseModel):
@@ -62,27 +22,25 @@ class PriorityInput(BaseModel):
     duration_minutes: float = Field(ge=0)
 
 
-def _terms(text: str) -> set[str]:
-    return set(re.findall(r"[a-z0-9]+", text.casefold()))
+def build_search_knowledge_tool(retriever: Retriever) -> BaseTool:
+    """Crea una herramienta RAG acotada al recuperador inicializado."""
 
+    @tool("search_incident_knowledge", args_schema=RetrievalQuery)
+    async def search_incident_knowledge(query: str, limit: int = 5) -> str:
+        """Recupera evidencia técnica mediante búsqueda híbrida semántica y BM25."""
 
-@tool(args_schema=SearchInput)
-def search_incident_knowledge(query: str, limit: int = 3) -> str:
-    """Busca evidencia operativa en una base documental local simulada."""
-
-    query_terms = _terms(query)
-    ranked: list[tuple[int, dict[str, Any]]] = []
-    for document in _KNOWLEDGE_BASE:
-        searchable = " ".join(
-            [document["title"], document["summary"], " ".join(document["tags"])]
+        results = await retriever.retrieve(query, limit=limit)
+        return json.dumps(
+            [
+                item.model_dump(mode="json")
+                if hasattr(item, "model_dump")
+                else item
+                for item in results
+            ],
+            ensure_ascii=False,
         )
-        score = len(query_terms & _terms(searchable))
-        ranked.append((score, document))
-    ranked.sort(key=lambda item: item[0], reverse=True)
-    matches = [document for score, document in ranked if score > 0][:limit]
-    if not matches:
-        matches = [ranked[0][1]]
-    return json.dumps(matches, ensure_ascii=False)
+
+    return search_incident_knowledge
 
 
 @tool(args_schema=PriorityInput)

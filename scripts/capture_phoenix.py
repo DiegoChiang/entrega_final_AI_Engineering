@@ -9,6 +9,7 @@ from playwright.async_api import async_playwright
 
 ROOT = Path(__file__).resolve().parents[1]
 SCREENSHOTS = ROOT / "screenshots"
+PROJECT_NAME = "incident-intelligence-system"
 BROWSER_CANDIDATES = (
     Path(r"C:\Program Files\Google\Chrome\Application\chrome.exe"),
     Path(r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"),
@@ -26,7 +27,7 @@ async def capture() -> None:
         await page.goto("http://127.0.0.1:6006", wait_until="networkidle")
         await page.wait_for_timeout(2_000)
 
-        project = page.get_by_text("preentrega7-agent-api", exact=False).first
+        project = page.get_by_text(PROJECT_NAME, exact=False).first
         if await project.count():
             href = await project.evaluate(
                 "element => element.closest('a')?.getAttribute('href')"
@@ -40,7 +41,7 @@ async def capture() -> None:
             )
 
         await page.screenshot(
-            path=SCREENSHOTS / "phoenix-cost-latency.png",
+            path=SCREENSHOTS / "final-phoenix-cost-latency.png",
             full_page=True,
         )
 
@@ -60,11 +61,11 @@ async def capture() -> None:
             )
             await page.keyboard.type('name == "agent_job.execute" and ')
             await page.keyboard.press("Enter")
-            trace_row = page.get_by_text("agent_job.execute", exact=True).nth(1)
+            trace_row = page.get_by_text("agent_job.execute", exact=True).nth(2)
             await trace_row.wait_for(state="visible", timeout=60_000)
 
         await page.screenshot(
-            path=SCREENSHOTS / "phoenix-traces.png",
+            path=SCREENSHOTS / "final-phoenix-traces.png",
             full_page=True,
         )
 
@@ -73,16 +74,16 @@ async def capture() -> None:
             await page.wait_for_timeout(2_000)
 
         await page.screenshot(
-            path=SCREENSHOTS / "phoenix-trace-detail.png",
+            path=SCREENSHOTS / "final-phoenix-trace-detail.png",
             full_page=True,
         )
 
         await page.get_by_text("Dashboards", exact=True).click()
         await page.get_by_text("Select project", exact=True).click()
-        await page.get_by_text("preentrega7-agent-api", exact=True).last.click()
+        await page.get_by_text(PROJECT_NAME, exact=True).last.click()
         await page.wait_for_timeout(5_000)
         await page.screenshot(
-            path=SCREENSHOTS / "phoenix-dashboards.png",
+            path=SCREENSHOTS / "final-phoenix-dashboards.png",
             full_page=True,
         )
         print("Capturas de Phoenix generadas en screenshots/.")

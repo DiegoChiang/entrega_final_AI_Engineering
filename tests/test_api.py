@@ -13,6 +13,7 @@ from multi_agent_orchestrator.api.repository import RedisJobRepository
 from multi_agent_orchestrator.api.runtime import Runtime
 from multi_agent_orchestrator.api.service import JobService
 from multi_agent_orchestrator.config import Settings
+from multi_agent_orchestrator.rag.schemas import RetrieverStats
 
 
 class InterruptingGraph:
@@ -36,9 +37,16 @@ class InterruptingGraph:
             }
         return {
             "final_answer": "Resultado aprobado.",
-            "analysis_result": {"priority": "P1", "risk_score": 81.3},
+            "analysis_result": {
+                "priority": "P1",
+                "risk_score": 81.3,
+                "drivers": ["errores", "latencia"],
+                "recommendation": "Escalar al equipo de pagos.",
+                "source_ids": ["runbook-checkout-01", "telemetry-checkout-02"],
+            },
             "approval_status": "approved",
             "completed_agents": ["researcher", "analyst", "validator", "approval"],
+            "research_findings": [],
         }
 
 
@@ -52,7 +60,16 @@ def test_api_enqueues_persists_and_resumes_job() -> None:
         service = JobService(repository, graph, queue_size=5, worker_count=1)
         await service.start()
         try:
-            yield Runtime(repository=repository, service=service)
+            yield Runtime(
+                repository=repository,
+                service=service,
+                rag_stats=RetrieverStats(
+                    backend="fake",
+                    documents=3,
+                    chunks=3,
+                    embedding_model="fake-embedding",
+                ),
+            )
         finally:
             await service.stop()
             await client.aclose()

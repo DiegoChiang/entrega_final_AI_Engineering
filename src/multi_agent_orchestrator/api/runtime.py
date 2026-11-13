@@ -15,12 +15,15 @@ from multi_agent_orchestrator.config import Settings
 from multi_agent_orchestrator.graph import build_graph
 from multi_agent_orchestrator.model import build_model
 from multi_agent_orchestrator.observability import configure_observability
+from multi_agent_orchestrator.rag.schemas import RetrieverStats
+from multi_agent_orchestrator.rag.service import build_retriever
 
 
 @dataclass(slots=True)
 class Runtime:
     repository: RedisJobRepository
     service: JobService
+    rag_stats: RetrieverStats
 
 
 @asynccontextmanager
@@ -28,11 +31,13 @@ async def production_runtime(settings: Settings) -> AsyncIterator[Runtime]:
     configure_observability(settings)
     redis_client = Redis.from_url(settings.redis_url, decode_responses=True)
     await redis_client.ping()
+    retriever = await build_retriever(settings)
 
     async with AsyncRedisSaver.from_conn_string(settings.redis_url) as checkpointer:
         await checkpointer.asetup()
         graph = build_graph(
             build_model(settings),
+            retriever=retriever,
             max_steps=settings.supervisor_max_steps,
             checkpointer=checkpointer,
         )
@@ -49,7 +54,11 @@ async def production_runtime(settings: Settings) -> AsyncIterator[Runtime]:
         )
         await service.start()
         try:
-            yield Runtime(repository=repository, service=service)
+            yield Runtime(
+                repository=repository,
+                service=service,
+                rag_stats=retriever.stats,
+            )
         finally:
             await service.stop()
             await redis_client.aclose()

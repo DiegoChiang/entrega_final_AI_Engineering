@@ -1,40 +1,73 @@
-# Arquitectura operativa
+# Arquitectura técnica
 
-## Recepción y backpressure
+## Límites del sistema
 
-FastAPI valida el cuerpo con `JobCreate`, crea un UUID, persiste `QUEUED` y usa `put_nowait` sobre una
-`asyncio.Queue` acotada. La respuesta no espera al modelo. Cuando la cola está llena, el trabajo queda
-en `FAILED` y la API devuelve `503`.
+FastAPI acepta solicitudes validadas y delega su procesamiento a una cola `asyncio.Queue`. Los
+endpoints permanecen libres mientras los workers ejecutan el grafo. Redis cumple dos funciones
+separadas: estado consultable de cada trabajo y checkpoints internos de LangGraph.
 
-## Persistencia
+## Recuperación
 
-`RedisJobRepository` guarda contratos JSON en hashes `agent-job:{job_id}` y renueva su TTL con cada
-transición. Este registro sirve al polling de clientes y conserva errores del background worker.
+El corpus se convierte en `KnowledgeDocument` y `KnowledgeChunk`. Cada fragmento recibe un hash
+estable construido a partir del documento, página, posición y contenido. La huella completa del
+corpus controla la reutilización del índice local.
 
-`AsyncRedisSaver` mantiene el estado interno de LangGraph. La configuración
-`configurable.thread_id = job_id` vincula los checkpoints con el trabajo y permite reanudar el mismo
-grafo después de una pausa o reinicio.
+`HybridRetriever` consulta en paralelo lógico dos señales:
+
+- similitud coseno de embeddings;
+- relevancia BM25 sobre tokens normalizados.
+
+Las puntuaciones BM25 se normalizan y se combinan con pesos 0.6/0.4. La salida se deduplica por
+`document_id` y se valida como `RetrievedDocument`.
+
+## Coordinación de agentes
+
+El Supervisor selecciona un único nodo por iteración. Las guardas corrigen rutas que no cumplen los
+prerrequisitos:
+
+1. Sin fuentes: investigador.
+2. Con fuentes y sin cálculo: analista.
+3. Con cálculo sin validar: validador.
+4. Resultado crítico pendiente: aprobación.
+5. Resultado validado: sintetizador.
+
+El investigador solo dispone de `search_incident_knowledge`. El analista solo dispone de
+`calculate_incident_priority`. Esta separación reduce el acceso innecesario a herramientas y evita
+que el modelo sustituya cálculos deterministas.
 
 ## Human-in-the-loop
 
-El analista marca `requires_approval` para prioridad P1 o riesgo mayor o igual a 75. Tras validar la
-evidencia, el supervisor dirige el flujo al nodo `approval`. El nodo llama `interrupt()` con un
-payload serializable y el worker publica `WAITING_APPROVAL`.
+Una prioridad P1 o riesgo mayor o igual a 75 dirige el grafo al nodo `approval`. `interrupt()`
+produce un payload serializable y el worker publica `WAITING_APPROVAL`. El endpoint de decisión
+vuelve a encolar el trabajo y ejecuta `Command(resume=...)` con el mismo `thread_id`.
 
-El endpoint de aprobación valida que el trabajo esté esperando, lo vuelve a encolar y el worker
-invoca `Command(resume=decision)` con el mismo `thread_id`. Una aprobación retorna al supervisor; un
-rechazo salta a `END` y conserva el motivo.
+## Contratos
+
+Pydantic valida:
+
+- configuración y secretos;
+- cuerpos y respuestas de FastAPI;
+- estados, resultados y referencias;
+- entradas de herramientas;
+- documentos, fragmentos y resultados RAG;
+- decisiones estructuradas de los modelos.
+
+Los modelos expuestos usan `extra="forbid"` para rechazar campos inesperados.
+
+## Asincronía
+
+Las llamadas al chat, embeddings, Redis, LangGraph y HTTP usan APIs asíncronas. Operaciones de disco,
+BM25 y SDKs sin interfaz asíncrona se aíslan mediante `asyncio.to_thread`. Los workers se crean con
+`asyncio.create_task` y se cierran de forma coordinada durante el lifespan.
 
 ## Observabilidad
 
-`phoenix.otel.register` configura un exportador OTLP/HTTP. Cada ejecución del worker crea el span raíz
-`agent_job.execute`, mientras OpenInference instrumenta LangChain para producir spans de los modelos
-y componentes internos. El contexto contiene el identificador del trabajo, el worker y la condición
-de reanudación.
+Phoenix recibe OTLP/HTTP y la autoinstrumentación de LangChain. La jerarquía permite seguir API,
+worker, grafo, Supervisor, RAG, herramientas, modelos, validación, interrupción y reanudación. Los
+errores conservan su tipo en Redis y también aparecen en los spans.
 
-## Fallos
+## Modos de despliegue
 
-La frontera del worker captura excepciones no controladas y persiste `FAILED`, tipo de excepción,
-mensaje y hora de finalización. El worker siempre libera la posición de la cola mediante
-`task_done()`. La cancelación durante el apagado se propaga y los clientes Redis se cierran de forma
-explícita en el lifespan de FastAPI.
+El modo local persiste vectores en un volumen de Docker. El modo Pinecone conserva el corpus BM25
+local y utiliza Pinecone Serverless para la señal semántica. Nombres, namespaces, región, dimensión,
+modelos y pesos se reciben por variables de entorno.

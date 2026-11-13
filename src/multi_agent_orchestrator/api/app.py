@@ -36,10 +36,10 @@ def create_app(
             yield
 
     application = FastAPI(
-        title="Production Multi-Agent API",
-        version="0.7.0",
+        title="Incident Intelligence System API",
+        version="1.0.0",
         description=(
-            "API asincrona con trabajos persistidos en Redis, checkpoints de LangGraph, "
+            "Sistema RAG multi-agente asincrono con Redis, checkpoints de LangGraph, "
             "trazabilidad Phoenix y aprobacion humana para resultados criticos."
         ),
         lifespan=lifespan,
@@ -56,6 +56,9 @@ def create_app(
             status="ok" if redis_ok else "degraded",
             redis="ok" if redis_ok else "unavailable",
             queue_depth=runtime.service.queue_depth,
+            rag_backend=runtime.rag_stats.backend,
+            rag_documents=runtime.rag_stats.documents,
+            rag_chunks=runtime.rag_stats.chunks,
         )
 
     @application.post(

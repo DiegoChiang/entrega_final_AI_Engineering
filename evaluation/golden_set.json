@@ -1,0 +1,22 @@
+[
+  {
+    "question": "¿Que debe revisarse ante errores sostenidos en checkout?",
+    "relevant_document_ids": ["runbook-checkout-01", "telemetry-checkout-02"]
+  },
+  {
+    "question": "¿Como se mitiga la saturacion del proveedor de pagos?",
+    "relevant_document_ids": ["postmortem-payments-03", "runbook-checkout-01"]
+  },
+  {
+    "question": "¿Que hacer cuando el indice de busqueda esta atrasado?",
+    "relevant_document_ids": ["runbook-search-04", "telemetry-search-05"]
+  },
+  {
+    "question": "¿Como responder a la presion de memoria de Redis?",
+    "relevant_document_ids": ["runbook-redis-06", "postmortem-redis-07"]
+  },
+  {
+    "question": "¿Cuando un incidente requiere aprobacion humana?",
+    "relevant_document_ids": ["policy-severity-08", "runbook-checkout-01"]
+  }
+]

@@ -3,11 +3,13 @@ from langgraph.types import Command
 
 from multi_agent_orchestrator.api.service import initial_state
 from multi_agent_orchestrator.graph import build_graph
-from tests.fakes import ScriptedModel
+from tests.fakes import FakeRetriever, ScriptedModel
 
 
 async def test_graph_pauses_and_resumes_for_critical_result() -> None:
-    graph = build_graph(ScriptedModel(), checkpointer=MemorySaver())
+    graph = build_graph(
+        ScriptedModel(), retriever=FakeRetriever(), checkpointer=MemorySaver()
+    )
     config = {"configurable": {"thread_id": "critical-job"}}
 
     paused = await graph.ainvoke(
@@ -36,7 +38,9 @@ async def test_graph_pauses_and_resumes_for_critical_result() -> None:
 
 
 async def test_human_rejection_stops_before_synthesis() -> None:
-    graph = build_graph(ScriptedModel(), checkpointer=MemorySaver())
+    graph = build_graph(
+        ScriptedModel(), retriever=FakeRetriever(), checkpointer=MemorySaver()
+    )
     config = {"configurable": {"thread_id": "rejected-job"}}
     await graph.ainvoke(initial_state("Analiza el incidente critico de checkout."), config=config)
 
@@ -53,7 +57,9 @@ async def test_human_rejection_stops_before_synthesis() -> None:
 async def test_specialists_keep_bounded_toolsets() -> None:
     from multi_agent_orchestrator.agents import AnalysisAgent, ResearchAgent
 
-    research_tools = {item.name for item in ResearchAgent.tools}
+    research_tools = {
+        item.name for item in ResearchAgent(ScriptedModel(), FakeRetriever()).tools
+    }
     analysis_tools = {item.name for item in AnalysisAgent.tools}
 
     assert research_tools == {"search_incident_knowledge"}

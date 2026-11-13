@@ -14,10 +14,16 @@ ApprovalStatus = Literal["not_required", "pending", "approved", "rejected"]
 
 class ResearchFinding(TypedDict):
     source_id: str
+    chunk_id: str
     title: str
     summary: str
+    source: str
+    page: int
     metrics: dict[str, float]
     tags: list[str]
+    semantic_score: float
+    lexical_score: float
+    combined_score: float
 
 
 class AnalysisResult(TypedDict):

@@ -1,9 +1,21 @@
-# API de producción y monitoreo activo
+# Incident Intelligence System
 
-API REST asíncrona para ejecutar un orquestador multi-agente sin bloquear el event loop. Cada
-solicitud se convierte en un trabajo persistido en Redis, se procesa mediante workers acotados y
-conserva sus checkpoints de LangGraph. Los resultados críticos se pausan hasta recibir una decisión
-humana por un endpoint independiente.
+Sistema de IA para investigar incidentes técnicos, recuperar evidencia documental, calcular su
+prioridad y producir una respuesta trazable. La solución combina RAG híbrido, un grafo jerárquico
+de agentes, persistencia en Redis, aprobación humana y una API asíncrona instrumentada con Phoenix.
+
+## Capacidades
+
+- Recuperación híbrida: embeddings densos y BM25 sobre el mismo corpus.
+- Índice local persistente para ejecución reproducible y backend Pinecone opcional.
+- Supervisor LangGraph con investigadores, analista, validador y sintetizador.
+- Cálculo determinista de prioridad P1–P4 a partir de métricas recuperadas.
+- Interrupción y aprobación humana para resultados críticos.
+- Trabajos en background con backpressure y estados persistidos en Redis.
+- Checkpoints de LangGraph asociados al `job_id` para pausa y reanudación.
+- Contratos Pydantic estrictos para API, RAG, herramientas y resultados.
+- OpenTelemetry, OpenInference y Arize Phoenix para trazas, tokens, costo y latencia.
+- Modelos de chat intercambiables entre OpenAI y Anthropic.
 
 ## Arquitectura
 
@@ -13,106 +25,128 @@ flowchart LR
     API -->|202 + job_id| C
     API --> Q[asyncio.Queue acotada]
     Q --> W[Workers asíncronos]
-    W --> G[LangGraph multi-agente]
-    G <--> CP[(Redis Checkpoints)]
+    W --> G[LangGraph]
+    G <--> CP[(Redis Checkpointer)]
     API <--> JS[(Redis Job State)]
-    G -->|interrupt P1| H[WAITING_APPROVAL]
-    C -->|POST /approval| API
-    API -->|Command resume| Q
+    G --> S[Supervisor]
+    S --> R[Investigador]
+    R --> HR[Recuperación híbrida]
+    HR --> V[(Índice semántico)]
+    HR --> B[BM25]
+    S --> A[Analista]
+    S --> X[Validador]
+    S --> H[Aprobación humana]
+    S --> Y[Sintetizador]
     G --> O[OpenInference / OTLP]
     O --> P[Arize Phoenix]
 ```
 
-## Capacidades
+### Grafo de agentes
 
-- `POST /jobs` valida la solicitud, la encola y responde `202 Accepted` con un `job_id`.
-- `GET /jobs/{job_id}` permite consultar estados `QUEUED`, `RUNNING`, `WAITING_APPROVAL`,
-  `COMPLETED`, `REJECTED` y `FAILED`.
-- Redis conserva el estado de cada trabajo y sus errores durante 24 horas.
-- `AsyncRedisSaver` persiste checkpoints del grafo usando el `job_id` como `thread_id`.
-- Una cola acotada aplica backpressure y dos workers procesan trabajos concurrentemente.
-- Cualquier excepción del background worker actualiza el trabajo a `FAILED`.
-- Los resultados P1 o con riesgo mayor o igual a 75 activan `interrupt()`.
-- `POST /jobs/{job_id}/approval` reanuda el mismo checkpoint con `Command(resume=...)`.
-- Phoenix recibe spans OpenTelemetry y trazas OpenInference de LangChain/LangGraph.
-
-## Estructura
-
-```text
-.
-|-- screenshots/
-|   |-- phoenix-cost-latency.png
-|   |-- phoenix-dashboards.png
-|   |-- phoenix-trace-detail.png
-|   `-- phoenix-traces.png
-|-- artifacts/
-|   `-- load-test-results.json
-|-- scripts/
-|   |-- capture_phoenix.py
-|   `-- load_test.py
-|-- src/multi_agent_orchestrator/
-|   |-- api/
-|   |   |-- app.py
-|   |   |-- repository.py
-|   |   |-- runtime.py
-|   |   |-- schemas.py
-|   |   `-- service.py
-|   |-- approval.py
-|   |-- graph.py
-|   |-- observability.py
-|   `-- ...
-|-- compose.yaml
-|-- Dockerfile
-|-- requirements.txt
-`-- pyproject.toml
+```mermaid
+flowchart TD
+    START --> SUP[Supervisor]
+    SUP -->|falta evidencia| RES[Investigador RAG]
+    RES --> SUP
+    SUP -->|evidencia disponible| ANA[Analista]
+    ANA --> SUP
+    SUP -->|resultado calculado| VAL[Validador]
+    VAL --> SUP
+    SUP -->|resultado crítico| HITL[Interrupt / aprobación]
+    HITL -->|Command resume| SUP
+    SUP -->|validado| SYN[Sintetizador]
+    SYN --> END
 ```
+
+Las guardas del Supervisor impiden sintetizar sin evidencia, cálculo y validación. El límite de
+decisiones y el `recursion_limit` evitan ciclos ilimitados.
+
+## Flujo RAG
+
+1. Los documentos de `data/knowledge/` se validan con Pydantic.
+2. El contenido se fragmenta con solapamiento y conserva fuente, página, categoría, etiquetas y
+   métricas.
+3. El backend local reutiliza embeddings guardados en `state/rag-index.json` mientras no cambie el
+   corpus. Pinecone puede reemplazarlo mediante `RAG_BACKEND=pinecone`.
+4. Cada consulta combina similitud coseno y BM25 con pesos configurables.
+5. Se deduplican documentos y se entregan hasta cinco fuentes al investigador.
+6. El resultado final expone las referencias utilizadas.
+
+El Golden Set de cinco preguntas está en `evaluation/golden_set.json`. El resultado reproducido se
+encuentra en [`artifacts/rag-evaluation.json`](artifacts/rag-evaluation.json):
+
+| Métrica | Resultado |
+| --- | ---: |
+| Consultas | 5 |
+| Precision@5 media | 0.36 |
+| Recall@5 medio | 0.90 |
 
 ## Inicio con Docker Compose
 
-Requiere Docker Desktop y una clave de OpenAI válida.
+Requiere Docker Desktop y una clave válida de OpenAI. La clave de OpenAI también genera los
+embeddings cuando el chat usa Anthropic.
 
 ```bash
 copy .env.example .env
 ```
 
-Completar `OPENAI_API_KEY` en `.env` y ejecutar:
+Completar las credenciales necesarias y levantar todos los servicios:
 
 ```bash
 docker compose up --build
 ```
 
-Servicios disponibles:
-
 | Servicio | URL |
 | --- | --- |
 | API | <http://localhost:8000> |
 | Swagger UI | <http://localhost:8000/docs> |
+| OpenAPI | <http://localhost:8000/openapi.json> |
 | Phoenix | <http://localhost:6006> |
-| Redis Stack | `localhost:6379` |
+| Redis | `localhost:6379` |
 
-Comprobación de salud:
+La ruta de salud confirma Redis y el corpus RAG cargado:
 
 ```bash
 curl http://localhost:8000/health
 ```
 
-## Flujo de un trabajo
+Respuesta esperada:
 
-Crear:
+```json
+{
+  "status": "ok",
+  "redis": "ok",
+  "queue_depth": 0,
+  "rag_backend": "local",
+  "rag_documents": 8,
+  "rag_chunks": 8
+}
+```
+
+## API
+
+### Crear un trabajo
 
 ```bash
 curl -X POST http://localhost:8000/jobs \
   -H "Content-Type: application/json" \
-  -d '{"request":"Investiga el aumento de errores en checkout y calcula su prioridad."}'
+  -d '{"request":"Investiga los errores de checkout y calcula su prioridad con evidencia."}'
 ```
 
-Consultar:
+La API responde `202 Accepted` con un `job_id` y no bloquea mientras se ejecutan el RAG y los
+agentes.
+
+### Consultar el estado
 
 ```bash
 curl http://localhost:8000/jobs/JOB_ID
 ```
 
-Cuando el estado sea `WAITING_APPROVAL`, aprobar y reanudar:
+Estados posibles: `QUEUED`, `RUNNING`, `WAITING_APPROVAL`, `COMPLETED`, `REJECTED` y `FAILED`.
+
+### Aprobar o rechazar
+
+Cuando el estado sea `WAITING_APPROVAL`:
 
 ```bash
 curl -X POST http://localhost:8000/jobs/JOB_ID/approval \
@@ -120,68 +154,85 @@ curl -X POST http://localhost:8000/jobs/JOB_ID/approval \
   -d '{"approved":true,"feedback":"Riesgo revisado por operaciones."}'
 ```
 
-El rechazo usa el mismo endpoint con `approved: false` y termina el trabajo como `REJECTED`.
+El mismo endpoint acepta `approved: false`. La reanudación usa el mismo `thread_id` y continúa desde
+el checkpoint interrumpido.
 
-## Prueba concurrente
+## Proveedores y backends
 
-La prueba envía cinco peticiones simultáneas, espera las cinco pausas, aprueba cada trabajo y calcula
-la latencia p95 del recorrido completo:
+### Chat con OpenAI
+
+```text
+LLM_PROVIDER=openai
+OPENAI_API_KEY=...
+OPENAI_MODEL=gpt-5.4-mini
+```
+
+### Chat con Anthropic
+
+```text
+LLM_PROVIDER=anthropic
+ANTHROPIC_API_KEY=...
+ANTHROPIC_MODEL=claude-sonnet-4-5
+OPENAI_API_KEY=...
+```
+
+### Pinecone
+
+```text
+RAG_BACKEND=pinecone
+PINECONE_API_KEY=...
+PINECONE_INDEX_NAME=incident-intelligence
+PINECONE_NAMESPACE=technical-knowledge
+```
+
+El índice se crea con la dimensión configurada y métrica coseno. Las llamadas síncronas del SDK se
+ejecutan con `asyncio.to_thread` para no bloquear el event loop.
+
+## Persistencia y tolerancia a fallos
+
+- `RedisJobRepository` conserva estado, resultado y error durante 24 horas.
+- `AsyncRedisSaver` guarda los checkpoints internos de LangGraph.
+- La cola acotada devuelve `503` al alcanzar su capacidad.
+- El worker captura excepciones y publica `FAILED` con el tipo y mensaje.
+- Una salida estructurada inválida del modelo utiliza una degradación determinista y validada.
+- El índice local se invalida automáticamente cuando cambia el corpus.
+
+## Observabilidad
+
+El proyecto `incident-intelligence-system` recibe spans de FastAPI, LangGraph, modelos, herramientas
+y trabajos. El span `agent_job.execute` incorpora `job.id`, número de worker y condición de
+reanudación. `rag.retrieve` registra consulta, cantidad de resultados e identificadores documentales.
+
+Evidencias:
+
+- [Trazas de trabajos](screenshots/final-phoenix-traces.png)
+- [Detalle del Supervisor, RAG y especialistas](screenshots/final-phoenix-trace-detail.png)
+- [Costo y latencia](screenshots/final-phoenix-cost-latency.png)
+- [Dashboard de tokens y percentiles](screenshots/final-phoenix-dashboards.png)
+
+## Pruebas del sistema
+
+La prueba concurrente ejecuta cinco consultas distintas, reanuda automáticamente los casos que
+requieren aprobación y guarda las referencias de cada resultado:
 
 ```bash
 python scripts/load_test.py --base-url http://localhost:8000
 ```
 
-También puede ejecutarse dentro del contenedor:
-
-```bash
-docker compose exec api python -m multi_agent_orchestrator.load_test \
-  --base-url http://localhost:8000
-```
-
-La salida reproducida se encuentra en
-[`artifacts/load-test-results.json`](artifacts/load-test-results.json). Las capturas de Phoenix
-muestran las trazas, el costo calculado a partir de tokens y la distribución de latencia de esa
-corrida.
+Resultado guardado en
+[`artifacts/final-system-tests.json`](artifacts/final-system-tests.json):
 
 | Métrica | Resultado |
 | --- | ---: |
 | Concurrencia | 5 |
 | Trabajos completados | 5/5 |
-| Aprobaciones HITL | 5/5 |
-| Latencia p95 extremo a extremo | 37.451 s |
+| Aprobaciones HITL | 2/5 |
+| Latencia p95 extremo a extremo | 71.618 s |
 
-Evidencias: [dashboard con costo y percentil p95](screenshots/phoenix-dashboards.png),
-[costo y latencia por proyecto](screenshots/phoenix-cost-latency.png),
-[spans filtrados](screenshots/phoenix-traces.png) y
-[detalle de una reanudación](screenshots/phoenix-trace-detail.png).
+Escenarios: checkout, atraso del índice de búsqueda, memoria de Redis, saturación del adaptador de
+pagos y política de aprobación humana.
 
-## Observabilidad
-
-`PHOENIX_COLLECTOR_ENDPOINT` configura el destino OTLP y `PHOENIX_PROJECT_NAME` separa las trazas del
-proyecto. El span raíz `agent_job.execute` incluye `job.id`, número de worker y si la ejecución fue
-reanudada. La autoinstrumentación de LangChain agrega las llamadas al modelo, prompts, respuestas,
-tokens, duración y costo.
-
-En Phoenix:
-
-1. Abrir el proyecto `preentrega7-agent-api`.
-2. Filtrar las trazas por la hora de la prueba.
-3. Revisar costo total y latencia de las cinco ejecuciones.
-4. Abrir una traza para observar Supervisor, especialistas, validación, pausa y reanudación.
-
-## Ejecución sin contenedores
-
-Redis Stack y Phoenix deben estar activos antes de iniciar la API.
-
-```bash
-python -m venv .venv
-.venv\Scripts\activate
-python -m pip install -e ".[dev]"
-copy .env.example .env
-agent-api --host 0.0.0.0 --port 8000
-```
-
-## Pruebas y calidad
+## Calidad
 
 ```bash
 pytest
@@ -189,25 +240,30 @@ ruff check .
 docker compose config --quiet
 ```
 
-Las pruebas cubren encolado, respuesta `202`, Redis, transición a `WAITING_APPROVAL`, reanudación,
-rechazo humano, herramientas acotadas, validación y límite de supervisión.
+Las pruebas cubren recuperación híbrida, evaluación, contratos Pydantic, herramientas, guardas del
+Supervisor, cálculo de prioridad, pausa y reanudación, Redis, backpressure y endpoints.
 
-## Variables de entorno
+## Estructura
 
-| Variable | Propósito | Valor local |
-| --- | --- | --- |
-| `OPENAI_API_KEY` | Credencial del modelo | obligatorio |
-| `OPENAI_MODEL` | Modelo del orquestador | `gpt-5.4-mini` |
-| `LLM_VERIFY_SSL` | Verificación TLS del cliente del modelo | `true` |
-| `REDIS_URL` | Trabajos y checkpoints | `redis://localhost:6379` |
-| `WORKER_COUNT` | Workers de la cola | `2` |
-| `JOB_QUEUE_SIZE` | Backpressure | `100` |
-| `JOB_TTL_SECONDS` | Retención del estado | `86400` |
-| `PHOENIX_COLLECTOR_ENDPOINT` | Colector OTLP HTTP | `http://localhost:6006/v1/traces` |
-| `PHOENIX_PROJECT_NAME` | Proyecto de trazas | `preentrega7-agent-api` |
+```text
+.
+|-- data/knowledge/                 corpus técnico
+|-- evaluation/golden_set.json     casos relevantes del RAG
+|-- artifacts/                     resultados reproducibles
+|-- screenshots/                   evidencias de Phoenix
+|-- scripts/                        evaluación, carga y captura
+|-- src/multi_agent_orchestrator/
+|   |-- agents/                    especialistas
+|   |-- api/                       FastAPI, Redis y workers
+|   |-- rag/                       documentos, backends y fusión híbrida
+|   |-- graph.py                   grafo jerárquico
+|   |-- supervisor.py              enrutamiento y guardas
+|   |-- approval.py                human-in-the-loop
+|   `-- observability.py           Phoenix y OpenTelemetry
+|-- tests/
+|-- compose.yaml
+|-- Dockerfile
+`-- pyproject.toml
+```
 
-## Alcance
-
-El servicio expone el orquestador multi-agente y su operación local. La integración unificada de un
-RAG externo, clientes intercambiables de múltiples proveedores y todas las capas de conocimiento se
-mantiene fuera de este repositorio.
+Las claves reales, checkpoints, índices locales y archivos `.env` están excluidos del repositorio.

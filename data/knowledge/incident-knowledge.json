@@ -1,0 +1,84 @@
+{
+  "documents": [
+    {
+      "document_id": "runbook-checkout-01",
+      "title": "Runbook de errores del checkout",
+      "content": "Una tasa de error del checkout superior a 8% durante mas de 10 minutos exige escalar al equipo de pagos. El primer control consiste en revisar el pool de conexiones, la salud del proveedor externo y la cantidad de reintentos. Durante la mitigacion se debe activar el circuito de degradacion y evitar reintentos sin limite.",
+      "source": "runbooks/checkout-errors.md",
+      "page": 1,
+      "category": "runbook",
+      "tags": ["checkout", "errores", "pagos", "escalamiento"],
+      "metrics": {"error_rate_pct": 12.4, "duration_minutes": 18.0}
+    },
+    {
+      "document_id": "telemetry-checkout-02",
+      "title": "Telemetria consolidada del checkout",
+      "content": "La ventana del incidente registro una latencia p95 de 2450 ms en checkout y 1840 usuarios afectados. El servicio de catalogo se mantuvo dentro de su objetivo y los errores se concentraron en el adaptador del proveedor de pagos.",
+      "source": "telemetry/checkout-incident.json",
+      "page": 1,
+      "category": "telemetry",
+      "tags": ["checkout", "latencia", "usuarios", "pagos"],
+      "metrics": {"latency_p95_ms": 2450.0, "affected_users": 1840.0}
+    },
+    {
+      "document_id": "postmortem-payments-03",
+      "title": "Postmortem de saturacion del adaptador de pagos",
+      "content": "Un incidente comparable se resolvio limitando los reintentos, ampliando temporalmente el pool de conexiones y activando el circuito de degradacion mientras se recuperaba el proveedor. El multiplicador de reintentos habia alcanzado 3.1 y la recuperacion tomo 27 minutos.",
+      "source": "postmortems/payments-adapter.md",
+      "page": 2,
+      "category": "postmortem",
+      "tags": ["pagos", "checkout", "reintentos", "mitigacion"],
+      "metrics": {"retry_multiplier": 3.1, "recovery_minutes": 27.0}
+    },
+    {
+      "document_id": "runbook-search-04",
+      "title": "Runbook de busqueda de productos",
+      "content": "La busqueda de productos se degrada cuando el indice supera cinco minutos de atraso. Con siete minutos de atraso deben pausarse las actualizaciones masivas, revisar los consumidores y reconstruir solo las particiones afectadas.",
+      "source": "runbooks/product-search.md",
+      "page": 1,
+      "category": "runbook",
+      "tags": ["busqueda", "catalogo", "indice", "consumidores"],
+      "metrics": {"index_lag_minutes": 7.0, "duration_minutes": 12.0}
+    },
+    {
+      "document_id": "telemetry-search-05",
+      "title": "Indicadores del servicio de busqueda",
+      "content": "El servicio de busqueda presento latencia p95 de 1100 ms, una tasa de error de 3.2% y 420 usuarios afectados. La mayor correlacion se observo entre el atraso del indice y las consultas sin resultados.",
+      "source": "telemetry/search-service.json",
+      "page": 1,
+      "category": "telemetry",
+      "tags": ["busqueda", "latencia", "errores", "indice"],
+      "metrics": {"latency_p95_ms": 1100.0, "error_rate_pct": 3.2, "affected_users": 420.0}
+    },
+    {
+      "document_id": "runbook-redis-06",
+      "title": "Runbook de presion de memoria en Redis",
+      "content": "Cuando Redis supera 85% de memoria se debe identificar claves sin TTL, revisar el crecimiento de colas y confirmar la politica de eviccion. Antes de ampliar capacidad se eliminan cargas temporales y se corrigen productores que escriben registros sin vencimiento.",
+      "source": "runbooks/redis-memory.md",
+      "page": 1,
+      "category": "runbook",
+      "tags": ["redis", "memoria", "ttl", "colas"],
+      "metrics": {"memory_usage_pct": 89.0, "duration_minutes": 22.0}
+    },
+    {
+      "document_id": "postmortem-redis-07",
+      "title": "Postmortem de eviccion en Redis",
+      "content": "La ausencia de TTL en claves de sesiones genero presion de memoria y aumento de latencia. La mitigacion aplico expiraciones, redujo el lote de escritura y separo la cola de trabajos de la cache de sesiones.",
+      "source": "postmortems/redis-eviction.md",
+      "page": 1,
+      "category": "postmortem",
+      "tags": ["redis", "eviccion", "sesiones", "latencia"],
+      "metrics": {"latency_p95_ms": 1750.0, "affected_users": 760.0}
+    },
+    {
+      "document_id": "policy-severity-08",
+      "title": "Politica de severidad de incidentes",
+      "content": "La prioridad combina tasa de errores, latencia p95, usuarios afectados y duracion. Un puntaje de riesgo igual o superior a 75 corresponde a P1 y exige aprobacion humana antes de ejecutar acciones de alto impacto. Los resultados deben citar evidencia verificable.",
+      "source": "policies/incident-severity.md",
+      "page": 1,
+      "category": "policy",
+      "tags": ["prioridad", "p1", "riesgo", "aprobacion"],
+      "metrics": {}
+    }
+  ]
+}

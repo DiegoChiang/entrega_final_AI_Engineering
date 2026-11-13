@@ -163,6 +163,17 @@ class JobService:
                 "analysis_result": result.get("analysis_result"),
                 "approval_status": approval_status,
                 "completed_agents": result.get("completed_agents", []),
+                "sources": [
+                    {
+                        "document_id": finding["source_id"],
+                        "chunk_id": finding["chunk_id"],
+                        "title": finding["title"],
+                        "source": finding["source"],
+                        "page": finding["page"],
+                        "combined_score": finding["combined_score"],
+                    }
+                    for finding in result.get("research_findings", [])
+                ],
             },
         )
 

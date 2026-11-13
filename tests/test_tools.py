@@ -1,20 +1,20 @@
 import json
 
 from multi_agent_orchestrator.tools import (
+    build_search_knowledge_tool,
     calculate_incident_priority,
-    search_incident_knowledge,
 )
+from tests.fakes import FakeRetriever
 
 
-def test_research_tool_returns_relevant_sources() -> None:
-    payload = search_incident_knowledge.invoke(
-        {"query": "errores checkout pagos latencia", "limit": 3}
-    )
+async def test_research_tool_returns_validated_rag_sources() -> None:
+    tool = build_search_knowledge_tool(FakeRetriever())
+    payload = await tool.ainvoke({"query": "errores checkout pagos latencia", "limit": 3})
     findings = json.loads(payload)
 
     assert len(findings) == 3
-    assert "runbook-checkout-01" in {item["source_id"] for item in findings}
-    assert all(item["metrics"] for item in findings)
+    assert "runbook-checkout-01" in {item["document_id"] for item in findings}
+    assert all(item["combined_score"] > 0 for item in findings)
 
 
 def test_priority_tool_is_reproducible() -> None:
