@@ -112,3 +112,12 @@ class ScriptedModel:
                 "[telemetry-checkout-02] [postmortem-payments-03]."
             )
         )
+
+
+class MalformedStructuredModel(ScriptedModel):
+    def with_structured_output(self, schema: type[Any]) -> Any:
+        class InvalidResponse:
+            async def ainvoke(self, _messages: list[Any]) -> Any:
+                return schema.model_validate({})
+
+        return InvalidResponse()

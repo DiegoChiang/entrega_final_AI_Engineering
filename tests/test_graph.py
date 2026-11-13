@@ -3,7 +3,7 @@ from langgraph.types import Command
 
 from multi_agent_orchestrator.api.service import initial_state
 from multi_agent_orchestrator.graph import build_graph
-from tests.fakes import FakeRetriever, ScriptedModel
+from tests.fakes import FakeRetriever, MalformedStructuredModel, ScriptedModel
 
 
 async def test_graph_pauses_and_resumes_for_critical_result() -> None:
@@ -52,6 +52,32 @@ async def test_human_rejection_stops_before_synthesis() -> None:
     assert rejected["approval_status"] == "rejected"
     assert "Se requiere mas evidencia" in rejected["final_answer"]
     assert "synthesizer" not in rejected["completed_agents"]
+
+
+async def test_malformed_structured_outputs_use_valid_fallbacks() -> None:
+    graph = build_graph(
+        MalformedStructuredModel(),
+        retriever=FakeRetriever(),
+        checkpointer=MemorySaver(),
+    )
+    config = {"configurable": {"thread_id": "malformed-output-job"}}
+
+    paused = await graph.ainvoke(
+        initial_state("Investiga el impacto de errores de checkout y calcula su prioridad."),
+        config=config,
+    )
+
+    assert paused["task_completed"] is True
+    assert paused["analysis_result"]["priority"] == "P1"
+    assert paused["analysis_result"]["drivers"]
+
+    completed = await graph.ainvoke(
+        Command(resume={"approved": True, "feedback": "Salida revisada."}),
+        config=config,
+    )
+
+    assert completed["final_answer"].startswith("Prioridad P1")
+    assert completed["approval_status"] == "approved"
 
 
 async def test_specialists_keep_bounded_toolsets() -> None:
